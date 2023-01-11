@@ -11,7 +11,7 @@ in the source distribution for its full text.
 
 #include <errno.h>
 #include <fcntl.h>
-#include <langinfo.h>
+//#include <langinfo.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -870,7 +870,7 @@ static struct sigaction old_sig_handler[32];
 static void CRT_installSignalHandlers(void) {
    struct sigaction act;
    sigemptyset (&act.sa_mask);
-   act.sa_flags = (int)SA_RESETHAND | SA_NODEFER;
+   act.sa_flags = (long)SA_RESETHAND | SA_NODEFER;
    act.sa_handler = CRT_handleSIGSEGV;
    sigaction (SIGSEGV, &act, &old_sig_handler[SIGSEGV]);
    sigaction (SIGFPE, &act, &old_sig_handler[SIGFPE]);

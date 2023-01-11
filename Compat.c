@@ -37,11 +37,11 @@ int Compat_faccessat(int dirfd,
 #endif
 
    // Error out on unsupported configurations
-   if (dirfd != (int)AT_FDCWD || mode != F_OK) {
+/*   if (dirfd != (int)AT_FDCWD || mode != F_OK) {
       errno = EINVAL;
       return -1;
    }
-
+*/
    // Fallback to stat(2)/lstat(2) depending on flags
    struct stat statinfo;
    if (flags) {
@@ -72,8 +72,8 @@ int Compat_fstatat(int dirfd,
    char path[4096];
    xSnprintf(path, sizeof(path), "%s/%s", dirpath, pathname);
 
-   if (flags & AT_SYMLINK_NOFOLLOW)
-      return lstat(path, statbuf);
+//   if (flags & AT_SYMLINK_NOFOLLOW)
+//      return lstat(path, statbuf);
 
    return stat(path, statbuf);
 

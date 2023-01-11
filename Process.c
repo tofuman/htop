@@ -469,7 +469,7 @@ void Process_makeCommandStr(Process* this) {
       do {                                                                                    \
          WRITE_HIGHLIGHT(0, 1, CRT_colors[FAILED_READ], CMDLINE_HIGHLIGHT_FLAG_SEPARATOR);    \
          mbMismatch += SEPARATOR_LEN - 1;                                                     \
-         str = stpcpy(str, SEPARATOR);                                                        \
+         str = strcat(str, SEPARATOR);                                                        \
       } while (0)
 
    const int baseAttr = Process_isThread(this) ? CRT_colors[PROCESS_THREAD_BASENAME] : CRT_colors[PROCESS_BASENAME];
@@ -501,7 +501,7 @@ void Process_makeCommandStr(Process* this) {
       if ((showMergedCommand || (Process_isUserlandThread(this) && showThreadNames)) && procComm && strlen(procComm)) { /* set column to or prefix it with comm */
          if (strncmp(cmdline + cmdlineBasenameStart, procComm, MINIMUM(TASK_COMM_LEN - 1, strlen(procComm))) != 0) {
             WRITE_HIGHLIGHT(0, strlen(procComm), commAttr, CMDLINE_HIGHLIGHT_FLAG_COMM);
-            str = stpcpy(str, procComm);
+            str = strcat(str, procComm);
 
             if(!showMergedCommand)
                return;
@@ -544,7 +544,7 @@ void Process_makeCommandStr(Process* this) {
          WRITE_HIGHLIGHT(exeBasenameOffset, exeBasenameLen, delExeAttr, CMDLINE_HIGHLIGHT_FLAG_DELETED);
       else if (this->usesDeletedLib)
          WRITE_HIGHLIGHT(exeBasenameOffset, exeBasenameLen, delLibAttr, CMDLINE_HIGHLIGHT_FLAG_DELETED);
-      str = stpcpy(str, procExe);
+      str = strcat(str, procExe);
    } else {
       if (haveCommInExe)
          WRITE_HIGHLIGHT(0, exeBasenameLen, commAttr, CMDLINE_HIGHLIGHT_FLAG_COMM);
@@ -553,7 +553,7 @@ void Process_makeCommandStr(Process* this) {
          WRITE_HIGHLIGHT(0, exeBasenameLen, delExeAttr, CMDLINE_HIGHLIGHT_FLAG_DELETED);
       else if (this->usesDeletedLib)
          WRITE_HIGHLIGHT(0, exeBasenameLen, delLibAttr, CMDLINE_HIGHLIGHT_FLAG_DELETED);
-      str = stpcpy(str, procExe + exeBasenameOffset);
+      str = strcat(str, procExe + exeBasenameOffset);
    }
 
    bool haveCommInCmdline = false;
@@ -573,7 +573,7 @@ void Process_makeCommandStr(Process* this) {
    if (!haveCommInExe && !haveCommInCmdline && procComm && (!Process_isUserlandThread(this) || showThreadNames)) {
       WRITE_SEPARATOR;
       WRITE_HIGHLIGHT(0, strlen(procComm), commAttr, CMDLINE_HIGHLIGHT_FLAG_COMM);
-      str = stpcpy(str, procComm);
+      str = strcat(str, procComm);
       haveCommField = true;
    }
 
@@ -1062,13 +1062,14 @@ bool Process_setPriority(Process* this, int priority) {
    if (Settings_isReadonly())
       return false;
 
-   int old_prio = getpriority(PRIO_PROCESS, this->pid);
-   int err = setpriority(PRIO_PROCESS, this->pid, priority);
+    return true;
+//   int old_prio = getpriority(PRIO_PROCESS, this->pid);
+//   int err = setpriority(PRIO_PROCESS, this->pid, priority);
 
-   if (err == 0 && old_prio != getpriority(PRIO_PROCESS, this->pid)) {
+ //  if (err == 0 && old_prio != getpriority(PRIO_PROCESS, this->pid)) {
       this->nice = priority;
-   }
-   return (err == 0);
+  // }
+   //return (err == 0);
 }
 
 bool Process_changePriorityBy(Process* this, Arg delta) {
