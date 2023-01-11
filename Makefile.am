@@ -405,6 +405,27 @@ myhtopplatsources = $(pcp_platform_sources)
 pcp_htop_SOURCES  = $(myhtopplatprogram) $(myhtopheaders) $(myhtopplatheaders) $(myhtopsources) $(myhtopplatsources)
 endif
 
+# Redox
+# -----------
+
+redox_platform_headers = \
+	generic/gettime.h \
+	redox/Platform.h \
+	redox/ProcessField.h \
+	redox/RedoxProcess.h \
+	redox/RedoxProcessList.h
+
+redox_platform_sources = \
+	generic/gettime.c \
+	redox/Platform.c \
+	redox/RedoxProcess.c \
+	redox/RedoxProcessList.c
+
+if HTOP_REDOX
+myhtopplatsources = $(redox_platform_sources)
+myhtopplatheaders = $(redox_platform_headers)
+endif
+
 # Unsupported
 # -----------
 
