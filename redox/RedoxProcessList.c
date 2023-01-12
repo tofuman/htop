@@ -9,6 +9,8 @@ in the source distribution for its full text.
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/statvfs.h>
 
 #include "ProcessList.h"
 #include "RedoxProcess.h"
@@ -18,8 +20,8 @@ ProcessList* ProcessList_new(UsersTable* usersTable, Hashtable* dynamicMeters, H
    ProcessList* this = xCalloc(1, sizeof(ProcessList));
    ProcessList_init(this, Class(Process), usersTable, dynamicMeters, dynamicColumns, pidMatchList, userId);
 
-   this->existingCPUs = 1;
-   this->activeCPUs = 1;
+   this->existingCPUs = 4;
+   this->activeCPUs = 4;
 
    return this;
 }
@@ -31,64 +33,132 @@ void ProcessList_delete(ProcessList* this) {
 
 void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
 
+   struct statvfs statfs;
+    int fd = open("memory:", O_RDONLY);
+    fstatvfs(fd, &statfs);
+    close(fd);
+
+    super->totalMem = statfs.f_blocks * statfs.f_bsize; // total
+    super->usedMem = (statfs.f_blocks - statfs.f_bfree) * statfs.f_bsize; // used
+    super->availableMem = statfs.f_bavail * statfs.f_bsize; // free
+
+
    // in pause mode only gather global data for meters (CPU/memory/...)
    if (pauseProcessUpdate) {
       return;
    }
-
-   bool preExisting = true;
-   Process* proc;
-
-   proc = ProcessList_getProcess(super, 1, &preExisting, RedoxProcess_new);
-
-   /* Empty values */
-   proc->time = proc->time + 10;
-   proc->pid  = 1;
-   proc->ppid = 1;
-   proc->tgid = 0;
-
-   Process_updateComm(proc, "commof16char");
-   Process_updateCmdline(proc, "<redox architecture>", 0, 0);
-   Process_updateExe(proc, "/path/to/executable");
-
-   if (proc->settings->ss->flags & PROCESS_FLAG_CWD) {
-      free_and_xStrdup(&proc->procCwd, "/current/working/directory");
+   FILE * fp;
+   char line[250];
+   size_t len = 250;
+   ssize_t read;
+   fp = fopen("sys:/context", "r");
+   if (fp == NULL){
+      return;
    }
 
-   proc->updated = true;
+   read = fgets(line, len, fp); //skip heading
+   if (read == NULL)
+      return;
+   while (fgets(line, len, fp) != NULL) {
 
-   proc->state = RUNNING;
-   proc->isKernelThread = false;
-   proc->isUserlandThread = false;
-   proc->show = true; /* Reflected in proc->settings-> "hideXXX" really */
-   proc->pgrp = 0;
-   proc->session = 0;
-   proc->tty_nr = 0;
-   proc->tty_name = NULL;
-   proc->tpgid = 0;
-   proc->processor = 0;
+      bool preExisting;
+      Process* proc;
+      long pid, pgid, ppid, ruid, rgid, rns, euid, egid, ens, cpu, mem;
+      char stat[5];
+      char ticks[20];
+      char mem_units[5];
+      char name[100];
 
-   proc->percent_cpu = 2.5;
-   proc->percent_mem = 2.5;
-   Process_updateCPUFieldWidths(proc->percent_cpu);
+     sscanf(line, "%ld %ld %ld %ld %ld %ld %ld %ld %ld %s %ld %s %ld %s %s", &pid, &pgid, &ppid, &ruid, &rgid, &rns, &euid, &egid, &ens, stat, &cpu, ticks, &mem, mem_units, name);
 
-   proc->st_uid = 0;
-   proc->user = "nobody"; /* Update whenever proc->st_uid is changed */
+      proc = ProcessList_getProcess(super, pid, &preExisting, RedoxProcess_new);
 
-   proc->priority = 0;
-   proc->nice = 0;
-   proc->nlwp = 1;
-   proc->starttime_ctime = 1433116800; // Jun 01, 2015
-   Process_fillStarttimeBuffer(proc);
+      /* Empty values */
+      proc->time = proc->time + 10;
+      proc->pid  = pid;
+      proc->ppid = ppid;
+      proc->tgid = pid;
 
-   proc->m_virt = 100;
-   proc->m_resident = 100;
+      Process_updateComm(proc, "commof16char");
+      if (strstr(stat, "RR") == NULL) {
+        Process_updateCmdline(proc, name, 0, strlen(name));
+        Process_updateExe(proc, name);
+      } else if (!preExisting) {
+        Process_updateCmdline(proc, "kernel", 0, strlen("kernel"));
+      }
 
-   proc->minflt = 20;
-   proc->majflt = 20;
+      if (proc->settings->ss->flags & PROCESS_FLAG_CWD) {
+         free_and_xStrdup(&proc->procCwd, "/current/working/directory");
+      }
 
-   if (!preExisting)
-      ProcessList_add(super, proc);
+      proc->updated = true;
+   
+      if (stat[1] == 'R') {
+        proc->state = RUNNABLE;
+        if(strlen(stat) == 3 && stat[2] == '+')
+           proc->state = RUNNING;
+      } else if (stat[1] == 'B') {
+        proc->state = BLOCKED;
+      } else if (stat[1] == 'T') {
+        proc->state = TRACED;
+      } else if (stat[1] == 'S') {
+        proc->state = SLEEPING;
+      } else if (stat[1] == 'E') {
+        proc->state = ZOMBIE;
+      } else {
+        proc->state = UNKNOWN;
+      }
+
+
+      if (stat[0] == 'K' || stat[0] == 'R') {
+        proc->isKernelThread = true;
+        proc->isUserlandThread = false;
+      } else if (stat[0] == 'U') {
+        proc->isUserlandThread = true;
+        proc->isKernelThread = false;
+      }
+      proc->show = true; /* Reflected in proc->settings-> "hideXXX" really */
+      proc->pgrp = 0;
+      proc->session = 0;
+      proc->tty_nr = 0;
+      proc->tty_name = NULL;
+      proc->tpgid = pgid;
+      proc->processor = cpu;
+      
+      double mem_scaling = 1;
+      if (strcmp(mem_units, "KB")) {
+        mem_scaling = 1024;
+      } else if (strcmp(mem_units, "MB")) {
+        mem_scaling = 1024*1024;
+      } else if (strcmp(mem_units, "GB")) {
+        mem_scaling = 1024*1024*1024;
+      }
+      mem = mem * mem_scaling;
+
+      proc->percent_mem = mem / (double)(super->totalMem)* 100.0;
+      proc->percent_cpu = 2.5;
+      Process_updateCPUFieldWidths(proc->percent_cpu);
+   
+      proc->st_uid = 0;
+      proc->user = "nob"; /* Update whenever proc->st_uid is changed */
+   
+      proc->priority = 0;
+      proc->nice = 0;
+      proc->nlwp = 1;
+      proc->starttime_ctime = 1433116800; // Jun 01, 2015
+      Process_fillStarttimeBuffer(proc);
+   
+      proc->m_virt = 100;
+      proc->m_resident = 100;
+   
+      proc->minflt = 20;
+      proc->majflt = 20;
+   
+      if (!preExisting) {
+         ProcessList_add(super, proc);
+         super->totalTasks++;
+      }
+   }
 }
 
 bool ProcessList_isCPUonline(const ProcessList* super, unsigned int id) {

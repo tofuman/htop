@@ -11,6 +11,7 @@ in the source distribution for its full text.
 #include "redox/Platform.h"
 
 #include <math.h>
+#include <sys/statvfs.h>
 
 #include "CPUMeter.h"
 #include "ClockMeter.h"
@@ -51,8 +52,6 @@ const MeterClass* const Platform_meterTypes[] = {
    &LoadAverageMeter_class,
    &LoadMeter_class,
    &MemoryMeter_class,
-   &SwapMeter_class,
-   &MemorySwapMeter_class,
    &TasksMeter_class,
    &BatteryMeter_class,
    &HostnameMeter_class,
@@ -92,8 +91,8 @@ void Platform_setBindings(Htop_Action* keys) {
 
 int Platform_getUptime() {
     struct timespec ts;
-    long time = clock_gettime(CLOCK_MONOTONIC, &ts);
-   return time;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec;
 }
 
 void Platform_getLoadAverage(double* one, double* five, double* fifteen) {
@@ -119,11 +118,20 @@ double Platform_setCPUValues(Meter* this, unsigned int cpu) {
 }
 
 void Platform_setMemoryValues(Meter* this) {
-   (void) this;
+    struct statvfs stat;
+    int fd = open("memory:", O_RDONLY);
+    fstatvfs(fd, &stat);
+    close(fd);
+
+    this->total = stat.f_blocks * stat.f_bsize / 1024; // total
+    this->values[0] = (stat.f_blocks - stat.f_bfree) * stat.f_bsize / 1024; // used
+    this->values[4] = stat.f_bavail * stat.f_bsize / 1024; // free
 }
 
 void Platform_setSwapValues(Meter* this) {
-   (void) this;
+    this->total = 0;
+    this->values[0] = 0;
+    this->values[0] = 0;
 }
 
 char* Platform_getProcessEnv(pid_t pid) {
