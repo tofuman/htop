@@ -57,8 +57,10 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
    }
 
    read = fgets(line, len, fp); //skip heading
-   if (read == NULL)
+   if (read == NULL) {
+      fclose(fp);
       return;
+   }
    while (fgets(line, len, fp) != NULL) {
 
       bool preExisting;
@@ -69,7 +71,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
       char mem_units[5];
       char name[100];
 
-     sscanf(line, "%ld %ld %ld %ld %ld %ld %ld %ld %ld %s %ld %s %ld %s %s", &pid, &pgid, &ppid, &ruid, &rgid, &rns, &euid, &egid, &ens, stat, &cpu, ticks, &mem, mem_units, name);
+     sscanf(line, "%ld %ld %ld %ld %ld %ld %ld %ld %ld %s %*[#]%ld %*s %s %ld %s %s", &pid, &pgid, &ppid, &ruid, &rgid, &rns, &euid, &egid, &ens, stat, &cpu, ticks, &mem, mem_units, name);
 
       proc = ProcessList_getProcess(super, pid, &preExisting, RedoxProcess_new);
 
@@ -92,7 +94,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
       }
 
       proc->updated = true;
-   
+
       if (stat[1] == 'R') {
         proc->state = RUNNABLE;
         if(strlen(stat) == 3 && stat[2] == '+')
@@ -124,7 +126,7 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
       proc->tty_name = NULL;
       proc->tpgid = pgid;
       proc->processor = cpu;
-      
+
       double mem_scaling = 1;
       if (strcmp(mem_units, "KB")) {
         mem_scaling = 1024;
@@ -138,27 +140,49 @@ void ProcessList_goThroughEntries(ProcessList* super, bool pauseProcessUpdate) {
       proc->percent_mem = mem / (double)(super->totalMem)* 100.0;
       proc->percent_cpu = 2.5;
       Process_updateCPUFieldWidths(proc->percent_cpu);
-   
-      proc->st_uid = 0;
-      proc->user = "nob"; /* Update whenever proc->st_uid is changed */
-   
+
+
+      FILE * uid_fp;
+      char * uid_path;
+      char uid;
+      if (0 > asprintf(&uid_path, "proc:%d/uid", pid)){
+         return;
+      }
+      uid_fp = fopen(uid_path, "r");
+      if (uid_fp == NULL){
+         return;
+      }
+
+      uid = fgetc(uid_fp);
+      fclose(uid_fp);
+      if (uid == EOF){
+         return;
+      }
+      proc->st_uid = uid - '0';
+      if (proc->st_uid == 0) {
+         proc->user = "root";
+      } else {
+         proc->user = "nob"; /* Update whenever proc->st_uid is changed */
+      }
+
       proc->priority = 0;
       proc->nice = 0;
       proc->nlwp = 1;
       proc->starttime_ctime = 1433116800; // Jun 01, 2015
       Process_fillStarttimeBuffer(proc);
-   
+
       proc->m_virt = 100;
       proc->m_resident = 100;
-   
+
       proc->minflt = 20;
       proc->majflt = 20;
-   
+
       if (!preExisting) {
          ProcessList_add(super, proc);
          super->totalTasks++;
       }
    }
+   fclose(fp);
 }
 
 bool ProcessList_isCPUonline(const ProcessList* super, unsigned int id) {
